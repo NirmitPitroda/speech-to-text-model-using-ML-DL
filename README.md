@@ -6,7 +6,7 @@
 
 ## Overview
 
-This repository documents a complete, hands-on progression through machine learning and deep learning, culminating in an ASR system that transcribes speech to text in real time. The project spans five stages: exploratory data analysis, classical ML, image classification with CNNs, audio classification with RNNs/LSTMs, and a production-grade ASR pipeline trained on LibriSpeech.
+This repository documents a complete, hands-on progression through machine learning and deep learning, culminating in an ASR system that transcribes speech to text. The project spans five stages: exploratory data analysis, classical ML, image classification with CNNs, audio classification with RNNs/LSTMs, and a production-grade ASR pipeline trained on LibriSpeech.
 
 **The final model** uses a 3-layer Bidirectional LSTM trained with CTC loss on LibriSpeech `train-clean-100`, with beam search decoding enhanced by a KenLM n-gram language model for re-ranking — evaluated using Word Error Rate (WER) and Character Error Rate (CER).
 
@@ -23,22 +23,19 @@ speech-to-text-deep-learning/
 ├── 02_classical_ml/
 │   ├── pokemon_type_classification.ipynb   # Multi-class classification on Pokémon stats
 │   ├── pokemon_cas_regression.ipynb        # Linear Regression for attack score prediction
-│   └── legendary_detection.ipynb          # Binary classification with class imbalance handling
+│   └── legendary_detection.ipynb          # Binary classifier + CAS histogram analysis
 │
 ├── 03_image_classification/
-│   ├── basic_neural_network.ipynb     # Feedforward NN on Flowers dataset
+│   ├── basic_neural_network.ipynb     # Feedforward NN on Flowers dataset (PyTorch)
 │   └── cnn_classifier.ipynb           # CNN with data augmentation on Flowers dataset
 │
 ├── 04_speech_command_recognition/
 │   ├── rnn_classifier.ipynb           # RNN on Google Speech Commands (10 classes)
 │   ├── bilstm_classifier.ipynb        # Bidirectional LSTM with dropout
-│   └── cnn_lstm_hybrid.ipynb          # CNN + LSTM hybrid (bonus)
+│   └── cnn_lstm_hybrid.ipynb          # CNN + LSTM hybrid (bonus task)
 │
-├── 05_asr_model/
-│   └── lstm_asr.ipynb                 # Full ASR: BiLSTM + CTC + Beam Search + KenLM
-│
-├── requirements.txt
-└── README.md
+└── 05_asr_model/
+    └── lstm_asr.ipynb                 # Full ASR: BiLSTM + CTC + Beam Search + KenLM
 ```
 
 ---
@@ -53,7 +50,7 @@ Foundational data analysis on the VGChartz 2024 video game sales dataset.
 - Loaded, cleaned, and explored a real-world CSV dataset using Pandas and NumPy
 - Engineered a `total_sales` feature by aggregating regional sales columns
 - Computed statistical summaries (mean, median, std) using vectorized NumPy operations
-- Visualized sales distributions with histograms and critic score vs sales scatter plots using Matplotlib and Seaborn
+- Visualized sales distributions and critic score vs sales relationships using Matplotlib and Seaborn
 
 ---
 
@@ -64,7 +61,7 @@ Three distinct ML tasks on the Pokémon dataset.
 
 **Task 1 — Type Classification (Multi-class)**
 - Feature normalization and one-hot encoding of Pokémon types
-- Trained and compared: Logistic Regression, K-Nearest Neighbors, Random Forest, SVM (RBF kernel), XGBoost
+- Trained and compared: Logistic Regression, KNN, Random Forest, SVM (RBF kernel), XGBoost
 - Evaluated with accuracy, F1-score, and confusion matrix
 
 **Task 2 — Regression (CAS Prediction)**
@@ -129,7 +126,8 @@ Trained three progressively more powerful models on 10 classes from the Google S
 ---
 
 ### Stage 5 — End-to-End ASR System
-**Notebook:** `05_asr_model/lstm_asr.ipynb`
+**Notebook:** `05_asr_model/lstm_asr.ipynb`  
+**Platform:** Trained on Kaggle with NVIDIA Tesla T4 GPU
 
 A full automatic speech recognition pipeline trained on LibriSpeech `train-clean-100` (~100 hours of clean English speech).
 
@@ -149,18 +147,32 @@ Input: Log-Mel Spectrogram [B, T, 80]
 **Vocabulary:** 28 characters — `<blank>`, space, and `a-z`
 
 **Training**
-- Loss: `nn.CTCLoss` (blank token at index 0, `zero_infinity=True`)
+- Loss: `nn.CTCLoss` (blank=space token, `zero_infinity=True`)
 - Optimizer: Adam (lr=1e-4)
 - Trained on a 5,000-sample subset for compute efficiency
 - Batch size: 16, with custom `collate_fn` for variable-length sequence padding
 
+| Epoch | CTC Loss |
+|-------|----------|
+| 1     | 0.8549   |
+| 10    | 0.6295   |
+| 20    | 0.4481   |
+| 30    | 0.3115   |
+
+Consistent convergence across 30 epochs, with loss reducing by ~64% from epoch 1 to epoch 30.
+
 **Decoding**
 - **Beam Search** (beam width=8): CTC-aware beam search with blank and repeated token handling
-- **KenLM Language Model Re-ranking**: 3-gram pruned LM loaded via `kenlm`, combined with acoustic score as `0.1 × acoustic + 1.5 × LM_score` — significantly improves output fluency
+- **KenLM Language Model Re-ranking**: 3-gram pruned LM loaded via `kenlm`, combined with acoustic score as `0.1 × acoustic + 1.5 × LM_score`
 
-**Evaluation**
-- Word Error Rate (WER) via `jiwer`
-- Character Error Rate (CER) via `jiwer`
+**Evaluation** (on first batch after 30 epochs of training on 5k samples)
+
+| Metric | Beam Search |
+|--------|-------------|
+| WER    | ~79%        |
+| CER    | ~38%        |
+
+> **Note on results:** The WER/CER reflect training on only 5,000 samples (a small subset of the full LibriSpeech train-clean-100 dataset of ~28,000 utterances), constrained by compute budget. The model shows clear learning — CER of ~38% on clean speech with a character-level BiLSTM trained from scratch in under 2 hours on a T4 GPU is a strong baseline. Training on the full dataset would substantially reduce both metrics.
 
 ---
 
@@ -181,10 +193,11 @@ Input: Log-Mel Spectrogram [B, T, 80]
 |----------|-------|
 | Deep Learning | PyTorch, torchaudio |
 | Audio Processing | MFCC, Log-Mel Spectrograms, CTC Loss |
-| Decoding | Beam Search, KenLM (`kenlm`) |
+| Decoding | Beam Search (width=8), KenLM (`kenlm`) |
 | Classical ML | scikit-learn (LogReg, KNN, RF, SVM), XGBoost |
 | Evaluation | jiwer (WER/CER), sklearn metrics, confusion matrices |
 | Data & Viz | NumPy, Pandas, Matplotlib, Seaborn |
+| Platform | Kaggle (NVIDIA Tesla T4 GPU) |
 | Datasets | VGChartz 2024, Pokémon (Kaggle), Flowers Recognition (Kaggle), Google Speech Commands, LibriSpeech |
 
 ---
@@ -202,7 +215,7 @@ Open any notebook in Jupyter:
 jupyter notebook
 ```
 
-> **Note:** Stage 5 (`lstm_asr.ipynb`) was trained on Kaggle with GPU. The LibriSpeech dataset (~6GB) downloads automatically via `torchaudio.datasets.LIBRISPEECH`. The KenLM language model (`3-gram.pruned.3e-7.arpa`) is available via the OpenSLR project.
+> **Note:** Stage 5 (`lstm_asr.ipynb`) was trained on Kaggle with GPU. The LibriSpeech dataset (~6GB) downloads automatically via `torchaudio.datasets.LIBRISPEECH`. The KenLM language model (`3-gram.pruned.3e-7.arpa`) is available from the OpenSLR project.
 
 ---
 
